@@ -55,6 +55,14 @@ bool g_resetButtonPressed = false;  // true while holding (blink during countdow
 #define DNS_PORT 53
 #define WS_PORT 81
 
+// -------------------- 3 Inputs & 3 Outputs --------------------
+#define PIN_IN1  5   // INPUT_PULLUP
+#define PIN_IN2  6
+#define PIN_IN3  7
+#define PIN_OUT1 8
+#define PIN_OUT2 9
+#define PIN_OUT3 10
+
 Preferences prefs;
 WebServer server(80);
 DNSServer dnsServer;
@@ -307,8 +315,10 @@ void drawMatrixMessage(const String &msg) {
   if (!disp) return;
   uint16_t BLACK = dma_display->color565(0, 0, 0);
   uint16_t CYAN = dma_display->color565(0, 255, 255);
+  uint16_t GREEN = dma_display->color565(0, 255, 0);
+
   disp->fillScreen(BLACK);
-  disp->setTextColor(CYAN);
+  disp->setTextColor(GREEN);
   disp->setTextSize(1);
   disp->setCursor(2, 8);
   disp->print(msg);
@@ -372,6 +382,15 @@ void setup() {
   Serial.println("P5-1921-64x32-8S start");
 
   pinMode(RESET_BUTTON_PIN, INPUT_PULLUP);
+  pinMode(PIN_IN1, INPUT_PULLUP);
+  pinMode(PIN_IN2, INPUT_PULLUP);
+  pinMode(PIN_IN3, INPUT_PULLUP);
+  pinMode(PIN_OUT1, OUTPUT);
+  pinMode(PIN_OUT2, OUTPUT);
+  pinMode(PIN_OUT3, OUTPUT);
+  digitalWrite(PIN_OUT1, LOW);
+  digitalWrite(PIN_OUT2, LOW);
+  digitalWrite(PIN_OUT3, LOW);
 #if RGB_LED_PIN >= 0
   rgb.begin();
   rgb.setBrightness(80);
