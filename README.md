@@ -1,10 +1,10 @@
-# ESP32-S3 P5-1921 64×32 LED Matrix
+# ESP32-S3 P5-1921 128×32 LED Matrix (2× 64×32 side by side)
 
-HUB75 LED matrix display with WiFi (AP + STA), captive portal, WebSocket text messaging, and digital I/O.
+HUB75 LED matrix display: **2 panels side by side** (64×32 × 2 = 128×32), with WiFi (AP + STA), captive portal, WebSocket text messaging, and digital I/O. No E pin required.
 
 ## Pin Layout
 
-### HUB75 Matrix (P5-1921-64x32-8S, 1/8 scan)
+### HUB75 Matrix (P5-1921-64x32-8S × 2, 1/8 scan, horizontal chain)
 
 | HUB75 Signal | GPIO | Description |
 |--------------|------|-------------|
@@ -18,7 +18,7 @@ HUB75 LED matrix display with WiFi (AP + STA), captive portal, WebSocket text me
 | B | 36 | Row address bit 1 |
 | C | 21 | Row address bit 2 *(was 48; freed for NeoPixel)* |
 | D | 35 | Row address bit 3 |
-| E | - | Not used (1/8 scan 32px) |
+| E | - | Not used (32px height) |
 | LAT | 47 | Latch / Strobe |
 | OE | 14 | Output Enable |
 | CLK | 2 | Clock |
@@ -69,6 +69,19 @@ GPIO Usage Summary:
   47  HUB75 LAT
   48  NeoPixel status LED
 ```
+
+---
+
+## Panel Wiring (128×32)
+
+For the two panels to show different content (left vs right), they must be **daisy-chained**:
+
+```
+ESP32 HUB75 output  →  Panel 1 INPUT
+Panel 1 OUTPUT     →  Panel 2 INPUT
+```
+
+Only connect the ESP32 to Panel 1. If both panels are wired in parallel to the ESP32, they will show the same image.
 
 ---
 
