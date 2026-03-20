@@ -12,6 +12,7 @@
 static String s_boardStatus(DEVICE_WS_STATUS);
 static String s_boardVol(DEVICE_NAMEPLATE_VOL);
 static String s_boardPlate(DEVICE_NAMEPLATE);
+static uint32_t s_autoClearAtMs = 0;
 
 namespace {
 
@@ -218,4 +219,42 @@ bool matrixBuildStatusJson(char *buf, size_t bufLen) {
   int n = snprintf(buf, bufLen, "{\"status\":\"%s\",\"nameplatevol\":\"%s\",\"nameplate\":\"%s\"}",
                    s_boardStatus.c_str(), s_boardVol.c_str(), s_boardPlate.c_str());
   return n > 0 && (size_t)n < bufLen;
+}
+
+static bool boardStatusIsClear() {
+  String k = s_boardStatus;
+  k.trim();
+  k.toLowerCase();
+  return k == "clear";
+}
+
+void matrixConfigureAutoClear(bool hasDisplaytimeKey, uint32_t seconds) {
+  if (!hasDisplaytimeKey) {
+    s_autoClearAtMs = 0;
+    return;
+  }
+  if (seconds == 0) {
+    s_autoClearAtMs = 0;
+    return;
+  }
+  if (boardStatusIsClear()) {
+    s_autoClearAtMs = 0;
+    return;
+  }
+  constexpr uint32_t kMaxSec = 86400u * 7u;
+  if (seconds > kMaxSec)
+    seconds = kMaxSec;
+  s_autoClearAtMs = millis() + seconds * 1000UL;
+}
+
+void matrixPollAutoClear() {
+  if (s_autoClearAtMs == 0)
+    return;
+  if ((int32_t)(millis() - s_autoClearAtMs) < 0)
+    return;
+  s_autoClearAtMs = 0;
+  s_boardStatus = "clear";
+  if (!disp || !dma_display)
+    return;
+  disp->fillScreen(dma_display->color565(0, 0, 0));
 }

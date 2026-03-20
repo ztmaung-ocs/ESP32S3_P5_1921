@@ -5,6 +5,7 @@
 #ifndef MATRIX_H
 #define MATRIX_H
 
+#include <stdint.h>
 #include <ESP32-HUB75-MatrixPanel-I2S-DMA.h>
 #include <ESP32-VirtualMatrixPanel-I2S-DMA.h>
 
@@ -28,5 +29,12 @@ void matrixApplyBoardFields(bool setStatus, const char *status, bool setVol, con
                             bool setPlate, const char *nameplate);
 /** Writes same shape as WS: {"status":"...","nameplatevol":"...","nameplate":"..."} */
 bool matrixBuildStatusJson(char *buf, size_t bufLen);
+
+/**
+ * WebSocket `displaytime`: if hasKey is false, cancel auto-clear. If true and seconds > 0,
+ * clear full panel after that many seconds (status becomes "clear"). seconds 0 cancels.
+ */
+void matrixConfigureAutoClear(bool hasDisplaytimeKey, uint32_t seconds);
+void matrixPollAutoClear();
 
 #endif

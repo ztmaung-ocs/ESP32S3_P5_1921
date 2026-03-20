@@ -99,7 +99,8 @@ static void handleWsHelp() {
 <body>
   <h1>WebSocket (port 81)</h1>
   <p>Updates use JSON only. Example nameplate payload:</p>
-  <pre>{"status":"entrance","nameplatevol":"47W","nameplate":"987654"}</pre>
+  <pre>{"status":"entrance","nameplatevol":"47W","nameplate":"98765","displaytime":10}</pre>
+  <p>Optional <code>displaytime</code> is seconds until auto blank (omit to leave on). <code>displaytime</code> 0 cancels a pending timer.</p>
   <p>Blank both panels:</p>
   <pre>{"status":"clear"}</pre>
   <p><a href="/">WiFi config</a></p>
@@ -149,11 +150,19 @@ static bool handleWebSocketJson(uint8_t clientNum, const uint8_t *payload, size_
   }
 
   // Same shape as device JSON: updates split board (not one-row scroll of raw JSON)
-  if (doc.containsKey("status") || doc.containsKey("nameplatevol") || doc.containsKey("nameplate")) {
+  if (doc.containsKey("status") || doc.containsKey("nameplatevol") || doc.containsKey("nameplate") ||
+      doc.containsKey("displaytime")) {
     matrixApplyBoardFields(doc.containsKey("status"), doc["status"].as<const char *>(),
                            doc.containsKey("nameplatevol"), doc["nameplatevol"].as<const char *>(),
                            doc.containsKey("nameplate"), doc["nameplate"].as<const char *>());
     drawNameplateBoard(WiFi.localIP().toString());
+    uint32_t displaySec = 0;
+    if (doc.containsKey("displaytime")) {
+      double d = doc["displaytime"].as<double>();
+      if (d > 0 && d < 1e9)
+        displaySec = static_cast<uint32_t>(d);
+    }
+    matrixConfigureAutoClear(doc.containsKey("displaytime"), displaySec);
     sendDeviceStatusJson(clientNum);
     return true;
   }
@@ -268,6 +277,8 @@ void startSTA() {
 }
 
 void wifiWebLoop() {
+  matrixPollAutoClear();
+
   if (captivePortalActive) {
     dnsServer.processNextRequest();
   } else if (wifi_ssid.length() > 0 && WiFi.status() != WL_CONNECTED) {
