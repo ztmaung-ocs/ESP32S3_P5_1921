@@ -13,11 +13,13 @@ extern VirtualMatrixPanel *virtualDisp;
 extern Adafruit_GFX *disp;
 
 void initMatrix();
-void drawMatrixMessage(const String &msg);
+/** Full panel black with four blue square markers (non-JSON WebSocket payload). */
+void drawNonJsonWsIndicator();
 /**
  * Split 128×32 into two 64×32 boards: left = status, right = nameplate
- * (vol top / nameplate bottom). Text comes from config defaults until updated
- * via WebSocket JSON or matrixApplyBoardFields.
+ * (vol top / nameplate bottom). Not drawn at boot; call after WebSocket JSON
+ * with status / nameplatevol / nameplate (or matrixApplyBoardFields + draw).
+ * status `"clear"` (any case) blanks the full 128×32 panel.
  */
 void drawNameplateBoard(const String &ip);
 

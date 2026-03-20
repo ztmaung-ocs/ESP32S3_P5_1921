@@ -1,6 +1,6 @@
 # ESP32-S3 P5-1921 128×32 LED Matrix (2× 64×32 side by side)
 
-HUB75 LED matrix display: **2 panels side by side** (64×32 × 2 = 128×32), with WiFi (AP + STA), captive portal, WebSocket text messaging, and digital I/O. No E pin required.
+HUB75 LED matrix display: **2 panels side by side** (64×32 × 2 = 128×32), with WiFi (AP + STA), captive portal, WebSocket JSON nameplate updates, and digital I/O. No E pin required.
 
 ## Pin Layout
 
@@ -88,8 +88,8 @@ Only connect the ESP32 to Panel 1. If both panels are wired in parallel to the E
 ## Features
 
 - **WiFi**: AP mode (captive portal) for setup, STA mode when configured
-- **Web**: Config at `http://<IP>/`, message sender at `http://<IP>/msg`
-- **WebSocket**: Port 81 for text messages to the matrix
+- **Web**: Config at `http://<IP>/`, WebSocket help at `http://<IP>/msg`
+- **WebSocket**: Port 81; matrix stays blank until a JSON update with `status` / `nameplatevol` / `nameplate` (non-JSON shows four blue squares)
 - **Reset**: Hold Boot button 5s to clear WiFi and return to AP mode
 - **Status LED**: Green=connected, Blue=AP mode, Red blink=holding reset
 

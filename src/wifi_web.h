@@ -16,5 +16,4 @@ void wifiWebLoop();
 
 extern String wifi_ssid;
 extern String wifi_pass;
-extern String displayMessage;
 extern bool captivePortalActive;

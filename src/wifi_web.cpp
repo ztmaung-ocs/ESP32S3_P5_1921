@@ -21,7 +21,6 @@ WebSocketsServer webSocket(WS_PORT);
 
 String wifi_ssid = "";
 String wifi_pass = "";
-String displayMessage = "";
 bool captivePortalActive = false;
 
 static String buildConfigPage(const String &ssid) {
@@ -83,41 +82,27 @@ static void handleClear() {
   ESP.restart();
 }
 
-static void handleMsg() {
+static void handleWsHelp() {
   server.send(200, "text/html", R"rawliteral(
 <!DOCTYPE html>
 <html>
 <head>
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>P5 Matrix - Send Message</title>
+  <title>P5 Matrix — WebSocket</title>
   <style>
-    body{font-family:sans-serif;margin:20px;background:#1a1a1a;color:#eee;}
+    body{font-family:sans-serif;margin:20px;background:#1a1a1a;color:#eee;max-width:42rem;}
     h1{color:#0af;}
-    input{display:block;width:100%;padding:12px;margin:8px 0;box-sizing:border-box;border:1px solid #444;border-radius:6px;background:#222;color:#fff;font-size:16px;}
-    button{padding:12px 24px;background:#0af;border:none;border-radius:6px;color:#fff;font-size:16px;cursor:pointer;}
-    button:disabled{opacity:0.5;cursor:not-allowed;}
-    #status{margin-top:12px;font-size:14px;color:#8f8;}
+    pre{background:#222;padding:12px;border-radius:6px;overflow-x:auto;font-size:13px;}
     a{color:#0af;}
   </style>
 </head>
 <body>
-  <h1>Send to Matrix</h1>
-  <input type="text" id="msg" placeholder="Type message..." maxlength="255" autofocus>
-  <button id="send">Send</button>
-  <p id="status">Connecting...</p>
+  <h1>WebSocket (port 81)</h1>
+  <p>Updates use JSON only. Example nameplate payload:</p>
+  <pre>{"status":"entrance","nameplatevol":"47W","nameplate":"987654"}</pre>
+  <p>Blank both panels:</p>
+  <pre>{"status":"clear"}</pre>
   <p><a href="/">WiFi config</a></p>
-  <script>
-    const ws = new WebSocket('ws://' + location.hostname + ':81');
-    const inp = document.getElementById('msg');
-    const btn = document.getElementById('send');
-    const st = document.getElementById('status');
-    ws.onopen = function(){ st.textContent = 'Connected'; btn.disabled = false; };
-    ws.onclose = function(){ st.textContent = 'Disconnected'; btn.disabled = true; };
-    ws.onerror = function(){ st.textContent = 'Error'; };
-    function send(){ var t = inp.value.trim(); if(t && ws.readyState===1){ ws.send(t); st.textContent = 'Sent: ' + t; inp.value=''; }}
-    btn.onclick = send;
-    inp.onkeydown = function(e){ if(e.key==='Enter') send(); };
-  </script>
 </body>
 </html>
 )rawliteral");
@@ -161,19 +146,6 @@ static bool handleWebSocketJson(uint8_t clientNum, const uint8_t *payload, size_
       sendDeviceStatusJson(clientNum);
       return true;
     }
-    if (!strcmp(action, "display")) {
-      const char *msg = doc["message"].as<const char *>();
-      if (!msg || !msg[0])
-        msg = doc["text"].as<const char *>();
-      if (msg && msg[0]) {
-        displayMessage = msg;
-        if (displayMessage.length() > 255)
-          displayMessage = displayMessage.substring(0, 255);
-        Serial.printf("WS JSON display: %s\n", displayMessage.c_str());
-        drawMatrixMessage(displayMessage);
-      }
-      return true;
-    }
   }
 
   // Same shape as device JSON: updates split board (not one-row scroll of raw JSON)
@@ -211,10 +183,13 @@ static void onWebSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_
         }
         if (handleWebSocketJson(num, payload, len))
           break;
-        displayMessage = "";
-        for (size_t i = 0; i < len; i++) displayMessage += (char)payload[i];
-        Serial.printf("WS message: %s\n", displayMessage.c_str());
-        drawMatrixMessage(displayMessage);
+        drawNonJsonWsIndicator();
+        if (len < 256) {
+          char dbg[256];
+          memcpy(dbg, payload, len);
+          dbg[len] = '\0';
+          Serial.printf("WS not JSON / unknown: %s\n", dbg);
+        }
       }
       break;
     default:
@@ -278,12 +253,11 @@ void startAPCaptive() {
 
   Serial.println("Config AP started (captive portal)");
   Serial.println("Connect WiFi: " AP_SSID);
-  drawMatrixMessage("Setup " + apIP.toString());
 }
 
 void startSTA() {
   server.on("/", handleRoot);
-  server.on("/msg", handleMsg);
+  server.on("/msg", handleWsHelp);
   server.on("/save", HTTP_POST, handleSave);
   server.on("/clear", HTTP_POST, handleClear);
   server.onNotFound(handleNotFound);
@@ -291,33 +265,18 @@ void startSTA() {
 
   webSocket.begin();
   webSocket.onEvent(onWebSocketEvent);
-
-  drawNameplateBoard(WiFi.localIP().toString());
 }
 
 void wifiWebLoop() {
   if (captivePortalActive) {
     dnsServer.processNextRequest();
-  } else {
-    // WiFi reconnect: when STA mode, has config, but disconnected
-    if (wifi_ssid.length() > 0 && WiFi.status() != WL_CONNECTED) {
-      static unsigned long lastReconnect = 0;
-      if (millis() - lastReconnect > 30000) {  // Retry every 30 seconds
-        lastReconnect = millis();
-        Serial.println("WiFi disconnected, reconnecting...");
-        WiFi.disconnect();
-        WiFi.begin(wifi_ssid.c_str(), wifi_pass.c_str());
-        drawMatrixMessage("Reconnecting...");
-      }
-    } else if (WiFi.status() == WL_CONNECTED) {
-      static bool wasConnected = false;
-      if (!wasConnected) {
-        wasConnected = true;
-        drawNameplateBoard(WiFi.localIP().toString());
-      }
-    } else {
-      static bool wasConnected = true;
-      wasConnected = false;
+  } else if (wifi_ssid.length() > 0 && WiFi.status() != WL_CONNECTED) {
+    static unsigned long lastReconnect = 0;
+    if (millis() - lastReconnect > 30000) {  // Retry every 30 seconds
+      lastReconnect = millis();
+      Serial.println("WiFi disconnected, reconnecting...");
+      WiFi.disconnect();
+      WiFi.begin(wifi_ssid.c_str(), wifi_pass.c_str());
     }
   }
 

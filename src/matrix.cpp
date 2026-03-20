@@ -120,49 +120,27 @@ void initMatrix() {
   disp = dma_display;
 #endif
 
-  // Boot test: red left, green right
-  disp->fillRect(0, 0, 64, 32, dma_display->color565(120, 0, 0));
-  disp->fillRect(64, 0, 64, 32, dma_display->color565(0, 120, 0));
-  delay(2000);
   disp->fillScreen(dma_display->color565(0, 0, 0));
 }
 
-void drawMatrixMessage(const String &msg) {
-  if (!disp) return;
-  uint16_t BLACK = dma_display->color565(0, 0, 0);
-  uint16_t GREEN = dma_display->color565(0, 255, 0);
-
-  disp->fillScreen(BLACK);
-
-  const int margin = 2;
-  const int stepX = kPlateCharW + kPlateCharGap;
-  const int stepY = kPlateCharH + kPlateLineGap;
-  int x = margin;
-  int y = margin;
-  const int maxX = disp->width() - margin;
-  const int maxY = disp->height() - margin;
-
-  for (size_t i = 0; i < msg.length(); i++) {
-    char c = msg[i];
-    if (c == '\n' || c == '\r') {
-      x = margin;
-      y += stepY;
-      if (y + kPlateCharH > maxY)
-        break;
-      if (c == '\r' && i + 1 < msg.length() && msg[i + 1] == '\n')
-        i++;
-      continue;
+void drawNonJsonWsIndicator() {
+  if (!disp || !dma_display)
+    return;
+  uint16_t black = dma_display->color565(0, 0, 0);
+  uint16_t blue = dma_display->color565(0, 140, 255);
+  disp->fillScreen(black);
+  const int dot = 4;
+  const int gap = 6;
+  const int blockW = dot * 2 + gap;
+  const int blockH = dot * 2 + gap;
+  int x0 = (disp->width() - blockW) / 2;
+  int y0 = (disp->height() - blockH) / 2;
+  for (int row = 0; row < 2; row++) {
+    for (int col = 0; col < 2; col++) {
+      int x = x0 + col * (dot + gap);
+      int y = y0 + row * (dot + gap);
+      disp->fillRect(x, y, dot, dot, blue);
     }
-
-    if (x + kPlateCharW > maxX) {
-      x = margin;
-      y += stepY;
-      if (y + kPlateCharH > maxY)
-        break;
-    }
-
-    drawPlate7x9Char(disp, x, y, c, GREEN);
-    x += stepX;
   }
 }
 
@@ -170,21 +148,50 @@ void drawNameplateBoard(const String &ip) {
   if (!disp) return;
   (void)ip;
 
+  uint16_t BLACK = dma_display->color565(0, 0, 0);
+
+  String key = s_boardStatus;
+  key.trim();
+  key.toLowerCase();
+  if (key == "clear") {
+    disp->fillScreen(BLACK);
+    return;
+  }
+
   const int h = disp->height();
   const int halfW = PANEL_RES_X;
 
-  uint16_t BLACK = dma_display->color565(0, 0, 0);
   uint16_t GREEN = dma_display->color565(0, 255, 0);
-  uint16_t STATUS_COLOR = dma_display->color565(255, 200, 0);
+  uint16_t RED = dma_display->color565(255, 0, 0);
+  uint16_t EXIT_COLOR = dma_display->color565(255, 200, 0);
+  uint16_t STATUS_COLOR = EXIT_COLOR;
+
+  const char *leftText = s_boardStatus.c_str();
+  uint16_t statusLineColor = STATUS_COLOR;
+  uint16_t plateColor = GREEN;
+
+  if (key == "entrance" || key == "allowed") {
+    leftText = "WELCOME";
+    statusLineColor = GREEN;
+    plateColor = GREEN;
+  } else if (key == "exit") {
+    leftText = "BYE BYE";
+    statusLineColor = EXIT_COLOR;
+    plateColor = EXIT_COLOR;
+  } else if (key == "not-allowed" || key == "notallowed" || key == "not_allowed") {
+    leftText = "CHECK";
+    statusLineColor = RED;
+    plateColor = RED;
+  }
 
   disp->fillScreen(BLACK);
 
   // 64×32 | 64×32 — left status, right nameplate (no tinted BG, no divider lines)
-  drawPlateLineInRect(disp, 0, 0, halfW, h, s_boardStatus.c_str(), STATUS_COLOR);
+  drawPlateLineInRect(disp, 0, 0, halfW, h, leftText, statusLineColor);
 
   const int nh = h / 2;
-  drawPlateLineInRect(disp, halfW, 0, halfW, nh, s_boardVol.c_str(), GREEN);
-  drawPlateLineInRect(disp, halfW, nh, halfW, h - nh, s_boardPlate.c_str(), GREEN);
+  drawPlateLineInRect(disp, halfW, 0, halfW, nh, s_boardVol.c_str(), plateColor);
+  drawPlateLineInRect(disp, halfW, nh, halfW, h - nh, s_boardPlate.c_str(), plateColor);
 }
 
 void matrixApplyBoardFields(bool setStatus, const char *status, bool setVol, const char *nameplatevol,

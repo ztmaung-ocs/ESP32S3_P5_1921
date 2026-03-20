@@ -1,6 +1,6 @@
 /**
  * P5-1921 128x32 (2x 64x32) LED Matrix
- * AP + Captive Portal + WiFi STA + WebSocket Text Display
+ * AP + Captive Portal + WiFi STA + WebSocket nameplate JSON
  */
 
 #include "config.h"
@@ -30,10 +30,8 @@ void setup() {
 
   if (connectWiFi()) {
     startSTA();
-    displayMessage = "Ready";
   } else {
     startAPCaptive();
-    displayMessage = "";
   }
 }
 

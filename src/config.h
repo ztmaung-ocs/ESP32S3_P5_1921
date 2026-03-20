@@ -39,9 +39,9 @@
 #define WS_PORT 81
 
 // JSON fields sent on WebSocket connect and on "status" / "getStatus" request
-#define DEVICE_WS_STATUS       "allowed"
+#define DEVICE_WS_STATUS       "entrance"
 #define DEVICE_NAMEPLATE_VOL   "47W"
-#define DEVICE_NAMEPLATE       "98765"
+#define DEVICE_NAMEPLATE       "987654"
 
 // -------------------- WiFi stability (EMI from HUB75) --------------------
 // Set to 1 to reduce matrix speed/brightness for better WiFi ping stability
