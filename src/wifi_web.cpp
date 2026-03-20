@@ -11,6 +11,8 @@
 #include <DNSServer.h>
 #include <Preferences.h>
 #include <WebSocketsServer.h>
+#include <ArduinoJson.h>
+#include <cstring>
 
 Preferences prefs;
 WebServer server(80);
@@ -121,6 +123,72 @@ static void handleMsg() {
 )rawliteral");
 }
 
+static void sendDeviceStatusJson(uint8_t clientNum) {
+  char buf[160];
+  if (matrixBuildStatusJson(buf, sizeof(buf)))
+    webSocket.sendTXT(clientNum, buf);
+}
+
+static bool isStatusRequest(const uint8_t *payload, size_t len) {
+  if (len == 6 && strncmp((const char *)payload, "status", 6) == 0)
+    return true;
+  if (len == 9 && strncmp((const char *)payload, "getStatus", 9) == 0)
+    return true;
+  return false;
+}
+
+/** If message starts with '{', parse as JSON. Returns true if handled (caller should not treat as plain text). */
+static bool handleWebSocketJson(uint8_t clientNum, const uint8_t *payload, size_t len) {
+  if (len < 2 || payload[0] != '{')
+    return false;
+
+  char tmp[384];
+  if (len >= sizeof(tmp))
+    return false;
+  memcpy(tmp, payload, len);
+  tmp[len] = '\0';
+
+  StaticJsonDocument<384> doc;
+  if (deserializeJson(doc, tmp))
+    return false;
+
+  const char *action = doc["action"].as<const char *>();
+  if (!action || !action[0])
+    action = doc["cmd"].as<const char *>();
+
+  if (action && action[0]) {
+    if (!strcmp(action, "status") || !strcmp(action, "getStatus")) {
+      sendDeviceStatusJson(clientNum);
+      return true;
+    }
+    if (!strcmp(action, "display")) {
+      const char *msg = doc["message"].as<const char *>();
+      if (!msg || !msg[0])
+        msg = doc["text"].as<const char *>();
+      if (msg && msg[0]) {
+        displayMessage = msg;
+        if (displayMessage.length() > 255)
+          displayMessage = displayMessage.substring(0, 255);
+        Serial.printf("WS JSON display: %s\n", displayMessage.c_str());
+        drawMatrixMessage(displayMessage);
+      }
+      return true;
+    }
+  }
+
+  // Same shape as device JSON: updates split board (not one-row scroll of raw JSON)
+  if (doc.containsKey("status") || doc.containsKey("nameplatevol") || doc.containsKey("nameplate")) {
+    matrixApplyBoardFields(doc.containsKey("status"), doc["status"].as<const char *>(),
+                           doc.containsKey("nameplatevol"), doc["nameplatevol"].as<const char *>(),
+                           doc.containsKey("nameplate"), doc["nameplate"].as<const char *>());
+    drawNameplateBoard(WiFi.localIP().toString());
+    sendDeviceStatusJson(clientNum);
+    return true;
+  }
+
+  return false;
+}
+
 static void handleNotFound() {
   if (captivePortalActive) {
     server.sendHeader("Location", "http://" + WiFi.softAPIP().toString(), true);
@@ -132,8 +200,17 @@ static void handleNotFound() {
 
 static void onWebSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t len) {
   switch (type) {
+    case WStype_CONNECTED:
+      sendDeviceStatusJson(num);
+      break;
     case WStype_TEXT:
-      if (len > 0 && len < 256) {
+      if (len > 0 && len < 384) {
+        if (isStatusRequest(payload, len)) {
+          sendDeviceStatusJson(num);
+          break;
+        }
+        if (handleWebSocketJson(num, payload, len))
+          break;
         displayMessage = "";
         for (size_t i = 0; i < len; i++) displayMessage += (char)payload[i];
         Serial.printf("WS message: %s\n", displayMessage.c_str());
@@ -215,7 +292,7 @@ void startSTA() {
   webSocket.begin();
   webSocket.onEvent(onWebSocketEvent);
 
-  drawMatrixMessage("IP: " + WiFi.localIP().toString());
+  drawNameplateBoard(WiFi.localIP().toString());
 }
 
 void wifiWebLoop() {
@@ -236,7 +313,7 @@ void wifiWebLoop() {
       static bool wasConnected = false;
       if (!wasConnected) {
         wasConnected = true;
-        drawMatrixMessage("IP: " + WiFi.localIP().toString());
+        drawNameplateBoard(WiFi.localIP().toString());
       }
     } else {
       static bool wasConnected = true;
