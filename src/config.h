@@ -38,6 +38,10 @@
 #define DNS_PORT 53
 #define WS_PORT 81
 
+// -------------------- WiFi stability (EMI from HUB75) --------------------
+// Set to 1 to reduce matrix speed/brightness for better WiFi ping stability
+#define WIFI_FRIENDLY_MODE 1
+
 // -------------------- Digital I/O --------------------
 #define PIN_IN1  5   // INPUT_PULLUP
 #define PIN_IN2  6

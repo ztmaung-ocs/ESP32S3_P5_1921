@@ -181,6 +181,7 @@ bool connectWiFi(uint32_t timeout_ms) {
     delay(200);
   }
   Serial.println("WiFi OK: " + WiFi.localIP().toString());
+  WiFi.setSleep(false);   // Disable power save for more stable 24/7 operation
   return true;
 }
 
@@ -218,7 +219,31 @@ void startSTA() {
 }
 
 void wifiWebLoop() {
-  if (captivePortalActive) dnsServer.processNextRequest();
+  if (captivePortalActive) {
+    dnsServer.processNextRequest();
+  } else {
+    // WiFi reconnect: when STA mode, has config, but disconnected
+    if (wifi_ssid.length() > 0 && WiFi.status() != WL_CONNECTED) {
+      static unsigned long lastReconnect = 0;
+      if (millis() - lastReconnect > 30000) {  // Retry every 30 seconds
+        lastReconnect = millis();
+        Serial.println("WiFi disconnected, reconnecting...");
+        WiFi.disconnect();
+        WiFi.begin(wifi_ssid.c_str(), wifi_pass.c_str());
+        drawMatrixMessage("Reconnecting...");
+      }
+    } else if (WiFi.status() == WL_CONNECTED) {
+      static bool wasConnected = false;
+      if (!wasConnected) {
+        wasConnected = true;
+        drawMatrixMessage("IP: " + WiFi.localIP().toString());
+      }
+    } else {
+      static bool wasConnected = true;
+      wasConnected = false;
+    }
+  }
+
   server.handleClient();
   if (!captivePortalActive) webSocket.loop();
 }
