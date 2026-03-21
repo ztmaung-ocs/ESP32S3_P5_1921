@@ -14,6 +14,8 @@ extern VirtualMatrixPanel *virtualDisp;
 extern Adafruit_GFX *disp;
 
 void initMatrix();
+/** Full panel solid blue (AP) or green (STA) for boot splash before clear. */
+void matrixDrawBootSplash(bool apMode);
 /** Full panel black with four blue square markers (non-JSON WebSocket payload). */
 void drawNonJsonWsIndicator();
 /**

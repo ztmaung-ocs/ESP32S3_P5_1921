@@ -72,6 +72,11 @@ void setup() {
   } else {
     startAPCaptive();
   }
+
+  constexpr uint32_t kBootSplashMs = 5000;
+  matrixDrawBootSplash(captivePortalActive);
+  delay(kBootSplashMs);
+  matrixClearScreen();
 }
 
 void loop() {

@@ -195,6 +195,13 @@ void initMatrix() {
   disp->fillScreen(dma_display->color565(0, 0, 0));
 }
 
+void matrixDrawBootSplash(bool apMode) {
+  if (!disp || !dma_display)
+    return;
+  uint16_t c = apMode ? dma_display->color565(0, 0, 255) : dma_display->color565(0, 255, 0);
+  disp->fillScreen(c);
+}
+
 void drawNonJsonWsIndicator() {
   if (!disp || !dma_display)
     return;
