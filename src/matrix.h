@@ -37,4 +37,10 @@ bool matrixBuildStatusJson(char *buf, size_t bufLen);
 void matrixConfigureAutoClear(bool hasDisplaytimeKey, uint32_t seconds);
 void matrixPollAutoClear();
 
+/** Left = AP or WIFI, right = IP (10 s default); loop must call matrixPollIpDisplay — then full panel clears. */
+void matrixShowIpTemporary(const char *ipStr, uint32_t seconds, bool apMode);
+void matrixPollIpDisplay();
+/** Full panel black; status becomes clear; cancels IP timer and WS auto-clear. */
+void matrixClearScreen();
+
 #endif

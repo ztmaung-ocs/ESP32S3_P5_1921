@@ -13,6 +13,7 @@ static String s_boardStatus(DEVICE_WS_STATUS);
 static String s_boardVol(DEVICE_NAMEPLATE_VOL);
 static String s_boardPlate(DEVICE_NAMEPLATE);
 static uint32_t s_autoClearAtMs = 0;
+static uint32_t s_ipShowUntilMs = 0;
 
 namespace {
 
@@ -73,6 +74,76 @@ static void drawPlateLineInRect(Adafruit_GFX *d, int rx, int ry, int rw, int rh,
     drawPlate7x9Char(d, x, y, str[i], color);
     x += kPlateCharW + kPlateCharGap;
   }
+}
+
+/** IP split across two lines when needed, inside [rx,ry,rw,rh]. */
+static void drawIpLinesInRect(Adafruit_GFX *d, int rx, int ry, int rw, int rh, const char *ipStr,
+                              uint16_t fg) {
+  if (!ipStr)
+    return;
+  int len = static_cast<int>(strlen(ipStr));
+  if (len <= 7) {
+    drawPlateLineInRect(d, rx, ry, rw, rh, ipStr, fg);
+    return;
+  }
+  char line1[20];
+  char line2[20];
+  int mid = len / 2;
+  int dotIdx = -1;
+  int bestDist = len;
+  for (int i = 0; i < len; i++) {
+    if (ipStr[i] != '.')
+      continue;
+    int dist = i - mid;
+    if (dist < 0)
+      dist = -dist;
+    if (dist < bestDist) {
+      bestDist = dist;
+      dotIdx = i;
+    }
+  }
+  if (dotIdx < 0) {
+    int n1 = len < 7 ? len : 7;
+    memcpy(line1, ipStr, n1);
+    line1[n1] = '\0';
+    int n2 = len - n1;
+    if (n2 >= (int)sizeof(line2))
+      n2 = (int)sizeof(line2) - 1;
+    memcpy(line2, ipStr + n1, n2);
+    line2[n2] = '\0';
+  } else {
+    int n1 = dotIdx;
+    if (n1 >= (int)sizeof(line1))
+      n1 = (int)sizeof(line1) - 1;
+    memcpy(line1, ipStr, n1);
+    line1[n1] = '\0';
+    int n2 = len - dotIdx - 1;
+    if (n2 >= (int)sizeof(line2))
+      n2 = (int)sizeof(line2) - 1;
+    memcpy(line2, ipStr + dotIdx + 1, n2);
+    line2[n2] = '\0';
+  }
+
+  const int nh = rh / 2;
+  drawPlateLineInRect(d, rx, ry, rw, nh, line1, fg);
+  drawPlateLineInRect(d, rx, ry + nh, rw, rh - nh, line2, fg);
+}
+
+/** Left = "AP" or "WIFI"; right nameplate = IP (AP mode vs STA from caller). */
+static void drawModeAndIpOnBoards(bool apMode, const char *ipStr) {
+  if (!disp || !dma_display || !ipStr)
+    return;
+  uint16_t bg = dma_display->color565(0, 0, 0);
+  uint16_t fg = dma_display->color565(0, 200, 255);
+  const int h = disp->height();
+  const int halfW = PANEL_RES_X;
+
+  disp->fillRect(0, 0, halfW, h, bg);
+  const char *modeLabel = apMode ? "AP" : "WIFI";
+  drawPlateLineInRect(disp, 0, 0, halfW, h, modeLabel, fg);
+
+  disp->fillRect(halfW, 0, halfW, h, bg);
+  drawIpLinesInRect(disp, halfW, 0, halfW, h, ipStr, fg);
 }
 
 } // namespace
@@ -247,7 +318,34 @@ void matrixConfigureAutoClear(bool hasDisplaytimeKey, uint32_t seconds) {
   s_autoClearAtMs = millis() + seconds * 1000UL;
 }
 
+void matrixShowIpTemporary(const char *ipStr, uint32_t seconds, bool apMode) {
+  if (!ipStr || !ipStr[0])
+    return;
+  uint32_t dur = seconds ? seconds * 1000UL : 10000UL;
+  s_ipShowUntilMs = millis() + dur;
+  drawModeAndIpOnBoards(apMode, ipStr);
+}
+
+void matrixClearScreen() {
+  s_ipShowUntilMs = 0;
+  s_autoClearAtMs = 0;
+  s_boardStatus = "clear";
+  if (!disp || !dma_display)
+    return;
+  disp->fillScreen(dma_display->color565(0, 0, 0));
+}
+
+void matrixPollIpDisplay() {
+  if (s_ipShowUntilMs == 0)
+    return;
+  if ((int32_t)(millis() - s_ipShowUntilMs) < 0)
+    return;
+  matrixClearScreen();
+}
+
 void matrixPollAutoClear() {
+  if (s_ipShowUntilMs != 0 && (int32_t)(millis() - s_ipShowUntilMs) < 0)
+    return;
   if (s_autoClearAtMs == 0)
     return;
   if ((int32_t)(millis() - s_autoClearAtMs) < 0)

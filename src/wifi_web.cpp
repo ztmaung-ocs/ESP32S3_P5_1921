@@ -277,6 +277,7 @@ void startSTA() {
 }
 
 void wifiWebLoop() {
+  matrixPollIpDisplay();
   matrixPollAutoClear();
 
   if (captivePortalActive) {

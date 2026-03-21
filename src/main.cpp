@@ -7,6 +7,45 @@
 #include "matrix.h"
 #include "wifi_web.h"
 #include "status_led.h"
+#include <WiFi.h>
+
+/** IN1 (active low): status = AP or WIFI, nameplate = IP; 10 s then full clear. */
+static void pollIn1ShowIp() {
+  static bool prevHigh = true;
+  static uint32_t lastEdgeMs = 0;
+  bool pressed = digitalRead(PIN_IN1) == LOW;
+  uint32_t now = millis();
+  if (pressed && prevHigh) {
+    if (now - lastEdgeMs >= 200) {
+      lastEdgeMs = now;
+      const bool apMode = captivePortalActive;
+      String ip;
+      if (apMode)
+        ip = WiFi.softAPIP().toString();
+      else if (WiFi.status() == WL_CONNECTED)
+        ip = WiFi.localIP().toString();
+      else
+        ip = "NO WIFI";
+      matrixShowIpTemporary(ip.c_str(), 10, apMode);
+    }
+  }
+  prevHigh = !pressed;
+}
+
+/** IN2 (active low): clear full panel (same as status "clear"). */
+static void pollIn2ClearScreen() {
+  static bool prevHigh = true;
+  static uint32_t lastEdgeMs = 0;
+  bool pressed = digitalRead(PIN_IN2) == LOW;
+  uint32_t now = millis();
+  if (pressed && prevHigh) {
+    if (now - lastEdgeMs >= 200) {
+      lastEdgeMs = now;
+      matrixClearScreen();
+    }
+  }
+  prevHigh = !pressed;
+}
 
 void setup() {
   Serial.begin(115200);
@@ -52,6 +91,8 @@ void loop() {
     updateStatusLed();
   }
 
+  pollIn1ShowIp();
+  pollIn2ClearScreen();
   wifiWebLoop();
 
   delay(10);
