@@ -33,7 +33,10 @@
 #define CLK_PIN 2
 
 // -------------------- AP / WiFi --------------------
-#define AP_SSID "OCS-IoT-WiFi"
+// AP / hostname: prefix + last N hex digits of station MAC (right-hand side of 12-hex; use 4 or 5)
+#define DEVICE_MAC_SUFFIX_HEX 4
+#define AP_SSID_PREFIX "OCS-IoT"
+#define DEVICE_HOSTNAME_PREFIX "ocs-iot"
 #define AP_PASS "12345678"
 #define DNS_PORT 53
 #define WS_PORT 81

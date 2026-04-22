@@ -393,7 +393,8 @@ void matrixPollIdleWifiIndicator() {
   const bool idle = boardStatusIsClear() && !ipShowing && !s_nonJsonCenterIndicator;
   const bool showCorners = idle;
 
-  constexpr uint32_t kHalfPeriodMs = 5000;
+  constexpr uint32_t kIdleDotsOnMs = 1000;
+  constexpr uint32_t kIdleDotsOffMs = 6000;
   static bool phaseHigh = true;
   static uint32_t phaseStartMs = 0;
   static bool wasShowing = false;
@@ -450,7 +451,8 @@ void matrixPollIdleWifiIndicator() {
     return;
   }
 
-  if ((int32_t)(now - phaseStartMs) >= (int32_t)kHalfPeriodMs) {
+  const uint32_t phaseLenMs = phaseHigh ? kIdleDotsOnMs : kIdleDotsOffMs;
+  if ((int32_t)(now - phaseStartMs) >= (int32_t)phaseLenMs) {
     phaseStartMs = now;
     phaseHigh = !phaseHigh;
     if (phaseHigh) {

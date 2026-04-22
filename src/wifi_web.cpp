@@ -13,6 +13,8 @@
 #include <WebSocketsServer.h>
 #include <ArduinoJson.h>
 #include <cstring>
+#include <cstdio>
+#include "esp_mac.h"
 
 Preferences prefs;
 WebServer server(80);
@@ -22,6 +24,31 @@ WebSocketsServer webSocket(WS_PORT);
 String wifi_ssid = "";
 String wifi_pass = "";
 bool captivePortalActive = false;
+
+static void readStaMac(uint8_t mac[6]) { esp_read_mac(mac, ESP_MAC_WIFI_STA); }
+
+/** Last N hex digits of station MAC (N = DEVICE_MAC_SUFFIX_HEX, 1..12). */
+static String macHexSuffix(bool lower) {
+  int n = DEVICE_MAC_SUFFIX_HEX;
+  if (n < 1) n = 1;
+  if (n > 12) n = 12;
+  uint8_t m[6];
+  readStaMac(m);
+  char full[13];
+  if (lower)
+    std::snprintf(full, sizeof(full), "%02x%02x%02x%02x%02x%02x", m[0], m[1], m[2], m[3], m[4], m[5]);
+  else
+    std::snprintf(full, sizeof(full), "%02X%02X%02X%02X%02X%02X", m[0], m[1], m[2], m[3], m[4], m[5]);
+  return String(full + (12 - n));
+}
+
+static String buildApSsid() {
+  return String(AP_SSID_PREFIX) + "-" + macHexSuffix(false);
+}
+
+static String buildDeviceHostname() {
+  return String(DEVICE_HOSTNAME_PREFIX) + "-" + macHexSuffix(true);
+}
 
 static String buildConfigPage(const String &ssid) {
   return R"rawliteral(
@@ -232,6 +259,11 @@ bool connectWiFi(uint32_t timeout_ms) {
   if (wifi_ssid.length() == 0) return false;
   Serial.println("Connecting WiFi...");
   WiFi.mode(WIFI_STA);
+  {
+    const String host = buildDeviceHostname();
+    WiFi.setHostname(host.c_str());
+    Serial.println("hostname: " + host);
+  }
   WiFi.begin(wifi_ssid.c_str(), wifi_pass.c_str());
   unsigned long start = millis();
   while (WiFi.status() != WL_CONNECTED) {
@@ -248,9 +280,11 @@ bool connectWiFi(uint32_t timeout_ms) {
 
 void startAPCaptive() {
   WiFi.mode(WIFI_AP);
+  const String apSsid = buildApSsid();
   IPAddress apIP(192, 168, 4, 1);
   WiFi.softAPConfig(apIP, apIP, IPAddress(255, 255, 255, 0));
-  WiFi.softAP(AP_SSID, AP_PASS);
+  WiFi.softAP(apSsid.c_str(), AP_PASS);
+  WiFi.softAPsetHostname(buildDeviceHostname().c_str());
   dnsServer.start(DNS_PORT, "*", apIP);
   captivePortalActive = true;
 
@@ -261,7 +295,7 @@ void startAPCaptive() {
   server.begin();
 
   Serial.println("Config AP started (captive portal)");
-  Serial.println("Connect WiFi: " AP_SSID);
+  Serial.println("Connect WiFi: " + apSsid);
 }
 
 void startSTA() {
