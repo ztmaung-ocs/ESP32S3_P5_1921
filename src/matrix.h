@@ -42,6 +42,8 @@ void matrixPollAutoClear();
 /** Left = AP or WIFI, right = IP (10 s default); loop must call matrixPollIpDisplay — then full panel clears. */
 void matrixShowIpTemporary(const char *ipStr, uint32_t seconds, bool apMode);
 void matrixPollIpDisplay();
+/** When idle (status clear): four board-corner pixels blink 5s on / 5s off; color matches Neo (AP blue, STA green, else red). */
+void matrixPollIdleWifiIndicator();
 /** Full panel black; status becomes clear; cancels IP timer and WS auto-clear. */
 void matrixClearScreen();
 

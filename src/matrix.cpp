@@ -5,7 +5,9 @@
 #include "config.h"
 #include "matrix.h"
 #include "plate_font7x9.h"
+#include "wifi_web.h"
 #include <Arduino.h>
+#include <WiFi.h>
 #include <cstring>
 #include <cstdio>
 
@@ -14,6 +16,12 @@ static String s_boardVol(DEVICE_NAMEPLATE_VOL);
 static String s_boardPlate(DEVICE_NAMEPLATE);
 static uint32_t s_autoClearAtMs = 0;
 static uint32_t s_ipShowUntilMs = 0;
+/** Center 2×2 blue blocks from drawNonJsonWsIndicator — idle corner blink must not erase it. */
+static bool s_nonJsonCenterIndicator = false;
+/** Bumped on any full-panel draw outside matrixPollIdleWifiIndicator so corner blink resyncs. */
+static uint32_t s_panelContentStamp = 0;
+
+static void bumpPanelContentStamp() { ++s_panelContentStamp; }
 
 namespace {
 
@@ -198,6 +206,7 @@ void initMatrix() {
 void matrixDrawBootSplash(bool apMode) {
   if (!disp || !dma_display)
     return;
+  bumpPanelContentStamp();
   uint16_t c = apMode ? dma_display->color565(0, 0, 255) : dma_display->color565(0, 255, 0);
   disp->fillScreen(c);
 }
@@ -205,6 +214,8 @@ void matrixDrawBootSplash(bool apMode) {
 void drawNonJsonWsIndicator() {
   if (!disp || !dma_display)
     return;
+  bumpPanelContentStamp();
+  s_nonJsonCenterIndicator = true;
   uint16_t black = dma_display->color565(0, 0, 0);
   uint16_t blue = dma_display->color565(0, 140, 255);
   disp->fillScreen(black);
@@ -226,6 +237,7 @@ void drawNonJsonWsIndicator() {
 void drawNameplateBoard(const String &ip) {
   if (!disp) return;
   (void)ip;
+  bumpPanelContentStamp();
 
   uint16_t BLACK = dma_display->color565(0, 0, 0);
 
@@ -233,10 +245,12 @@ void drawNameplateBoard(const String &ip) {
   key.trim();
   key.toLowerCase();
   if (key == "clear") {
+    s_nonJsonCenterIndicator = false;
     disp->fillScreen(BLACK);
     return;
   }
 
+  s_nonJsonCenterIndicator = false;
   const int h = disp->height();
   const int halfW = PANEL_RES_X;
 
@@ -328,12 +342,16 @@ void matrixConfigureAutoClear(bool hasDisplaytimeKey, uint32_t seconds) {
 void matrixShowIpTemporary(const char *ipStr, uint32_t seconds, bool apMode) {
   if (!ipStr || !ipStr[0])
     return;
+  bumpPanelContentStamp();
+  s_nonJsonCenterIndicator = false;
   uint32_t dur = seconds ? seconds * 1000UL : 10000UL;
   s_ipShowUntilMs = millis() + dur;
   drawModeAndIpOnBoards(apMode, ipStr);
 }
 
 void matrixClearScreen() {
+  bumpPanelContentStamp();
+  s_nonJsonCenterIndicator = false;
   s_ipShowUntilMs = 0;
   s_autoClearAtMs = 0;
   s_boardStatus = "clear";
@@ -359,7 +377,99 @@ void matrixPollAutoClear() {
     return;
   s_autoClearAtMs = 0;
   s_boardStatus = "clear";
+  s_nonJsonCenterIndicator = false;
+  bumpPanelContentStamp();
   if (!disp || !dma_display)
     return;
   disp->fillScreen(dma_display->color565(0, 0, 0));
+}
+
+void matrixPollIdleWifiIndicator() {
+  if (!disp || !dma_display)
+    return;
+
+  const bool ipShowing =
+      s_ipShowUntilMs != 0 && (int32_t)(millis() - s_ipShowUntilMs) < 0;
+  const bool idle = boardStatusIsClear() && !ipShowing && !s_nonJsonCenterIndicator;
+  const bool showCorners = idle;
+
+  constexpr uint32_t kHalfPeriodMs = 5000;
+  static bool phaseHigh = true;
+  static uint32_t phaseStartMs = 0;
+  static bool wasShowing = false;
+  static uint32_t lastContentStamp = 0;
+  static uint16_t lastPaintedIdleDot565 = 0xFFFF;
+
+  if (s_panelContentStamp != lastContentStamp) {
+    lastContentStamp = s_panelContentStamp;
+    wasShowing = false;
+    phaseStartMs = 0;
+    lastPaintedIdleDot565 = 0xFFFF;
+  }
+
+  uint16_t black = dma_display->color565(0, 0, 0);
+  // Match status_led NeoPixel: AP=blue, STA connected=green, else red
+  auto idleStatusColor565 = []() -> uint16_t {
+    if (captivePortalActive)
+      return dma_display->color565(0, 0, 255);
+    if (WiFi.status() == WL_CONNECTED)
+      return dma_display->color565(0, 255, 0);
+    return dma_display->color565(255, 0, 0);
+  };
+  auto drawIdleWifiDots = [&](uint16_t fg) {
+    const int halfW = PANEL_RES_X; // left = status, right = nameplate (same as drawNameplateBoard)
+    const int ymax = disp->height() - 1;
+    const int xmax = disp->width() - 1;
+    disp->drawPixel(0, 0, fg);              // status board top-left
+    disp->drawPixel(halfW - 1, 0, fg);      // status board top-right
+    disp->drawPixel(halfW, ymax, fg);       // nameplate board bottom-left
+    disp->drawPixel(xmax, ymax, fg);        // nameplate board bottom-right
+  };
+
+  if (!showCorners) {
+    if (wasShowing) {
+      // Do not blank if nameplate / IP / non-JSON overlay took over the panel.
+      if (idle)
+        disp->fillScreen(black);
+      wasShowing = false;
+    }
+    phaseStartMs = 0;
+    lastPaintedIdleDot565 = 0xFFFF;
+    return;
+  }
+
+  uint32_t now = millis();
+  if (!wasShowing) {
+    wasShowing = true;
+    phaseStartMs = now;
+    phaseHigh = true;
+    uint16_t c = idleStatusColor565();
+    disp->fillScreen(black);
+    drawIdleWifiDots(c);
+    lastPaintedIdleDot565 = c;
+    return;
+  }
+
+  if ((int32_t)(now - phaseStartMs) >= (int32_t)kHalfPeriodMs) {
+    phaseStartMs = now;
+    phaseHigh = !phaseHigh;
+    if (phaseHigh) {
+      uint16_t c = idleStatusColor565();
+      disp->fillScreen(black);
+      drawIdleWifiDots(c);
+      lastPaintedIdleDot565 = c;
+    } else {
+      disp->fillScreen(black);
+      lastPaintedIdleDot565 = 0xFFFF;
+    }
+  }
+
+  if (phaseHigh) {
+    uint16_t c = idleStatusColor565();
+    if (c != lastPaintedIdleDot565) {
+      lastPaintedIdleDot565 = c;
+      disp->fillScreen(black);
+      drawIdleWifiDots(c);
+    }
+  }
 }

@@ -294,4 +294,5 @@ void wifiWebLoop() {
 
   server.handleClient();
   if (!captivePortalActive) webSocket.loop();
+  matrixPollIdleWifiIndicator();
 }
